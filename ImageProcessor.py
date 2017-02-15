@@ -68,4 +68,45 @@ class ImageProcessor:
         img_size = (img.shape[1], img.shape[0])
         return cv2.warpPerspective(img, self.transform_matrix, img_size, flags=cv2.INTER_LINEAR)
 
-    #def compute_binary_thresholded_imgae(self,img):
+    def compute_binary_thresholded_image(self,img):
+        # parameters, make arguments later on
+        # threshold x-gradient
+        min_grad = 30
+        max_grad = 150
+
+        # threshold s-channel
+        s_thresh_min = 175
+        s_thresh_max = 255
+
+        # convert image to HLS space
+        hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
+        s_channel = hls[:,:,2]
+
+        # convert image to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+        # compute gradient in x-direction using sobel
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0)
+        abs_sobelx = np.absolute(sobelx)
+        scaled_sobel = np.uint8(255*abs_sobelx/np.max(abs_sobelx))
+
+        scaled_grad_x_binary = np.zeros_like(scaled_sobel)
+        #sxbinary[(scaled_sobel >= thresh_min) & (scaled_sobel <= thresh_max)] = 1
+        retval, sxthresh = cv2.threshold(scaled_sobel, min_grad, max_grad, cv2.THRESH_BINARY)
+        scaled_grad_x_binary[(sxthresh >= min_grad) & (sxthresh <= max_grad)] = 1
+
+        s_channel_binary = np.zeros_like(s_channel)
+        s_thresh = cv2.inRange(s_channel.astype('uint8'), s_thresh_min, s_thresh_max)
+
+        s_channel_binary[(s_thresh == 255)] = 1
+
+        # Stack each channel to view their individual contributions in green and blue respectively
+        # This returns a stack of the two binary images, whose components you can see as different colors
+        color_binary = np.dstack(( np.zeros_like(sxthresh), sxthresh, s_thresh))
+
+        # Combine the two binary images
+        combined_binary = np.zeros_like(scaled_grad_x_binary)
+        combined_binary[(s_channel_binary == 1) | (scaled_grad_x_binary == 1)] = 1
+
+        #return color_binary, combined_binary
+        return combined_binary
