@@ -1,4 +1,5 @@
 from ImageProcessor import ImageProcessor
+from LaneLine       import LaneLine
 import cv2
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
@@ -8,108 +9,90 @@ import argparse
 from moviepy.editor import VideoFileClip
 
 # Define a class to handle lane line detection
-class LaneLines:
-    def __init__(self):
-        # init ImageProcessor
+class LaneLineDetector:
+    def __init__(self,debug):
         self.my_image_processor = ImageProcessor()
-        self.my_image_processor.calibrate_camera()
 
+        self.left_lane_line = LaneLine()
 
-    def compute_binary_images(self):
-        for file_name in glob.glob("test_images/*.jpg"):
-            img1= mpimg.imread(file_name)
-            color_binary, combined_binary = my_lanes_lines.my_image_processor.compute_binary_thresholded_image(img1)
-            mpimg.imsave('transformed_images/'+file_name,color_binary)
-            mpimg.imsave('transformed_images/'+file_name,combined_binary)
+        self.right_lane_line = LaneLine()
+
+        self.debug=debug
 
     def apply_pipeline(self,img):
-        undistorded_img = self.my_image_processor.undistort_image(img)
-        processed_image = self.process_image(img)
-        #return cv2.cvtColor(processed_image*255, cv2.COLOR_GRAY2RGB)
-        result, left_fitx, right_fitx, ploty, left_curverad, right_curverad = self.fit_lane_lines(processed_image)
 
-        final_result = my_lanes_lines.my_image_processor.draw_lanes_on_road(undistorded_img,result,ploty,left_fitx,right_fitx)
-        final_result = my_lanes_lines.my_image_processor.add_curve_radius_and_car_pos_to_images(final_result,0.0,left_curverad,right_curverad)
-        return final_result
-
-    def process_image(self, img):
         undistorted_img = self.my_image_processor.undistort_image(img)
+
         thresholded_img = self.my_image_processor.compute_binary_thresholded_image(undistorted_img)
+
+        transformed_img = self.my_image_processor.apply_perspective_transform(thresholded_img)
+
+        lane_img, left_fitx, right_fitx, ploty, position, left_curverad, right_curverad = self.get_lane_lines(transformed_img)
+
+        # draw lane line detection on distorted image
+        final_image = self.my_image_processor.draw_lanes_on_road(undistorted_img,lane_img,ploty,left_fitx,right_fitx)
+        final_image = self.my_image_processor.add_curve_radius_and_car_pos_to_images(final_image,position,left_curverad,right_curverad)
+
+        ## in debug mode show all images
+        if debug:
+            plt.imshow(undistorted_img)
+            plt.show()
+            plt.imshow(cv2.cvtColor(thresholded_img*255, cv2.COLOR_GRAY2RGB))
+            plt.show()
+            plt.imshow(cv2.cvtColor(transformed_img*255, cv2.COLOR_GRAY2RGB))
+            plt.show()
+            plt.imshow(lane_img)
+            plt.plot(left_fitx, ploty, color='yellow')
+            plt.plot(right_fitx, ploty, color='yellow')
+            plt.xlim(0, 1280)
+            plt.ylim(720, 0)
+            plt.show()
+            plt.imshow(final_image)
+            plt.show()
+
+        return final_image
+
+    def process_image(self, undistorted_img):
+        #undistorted_img = self.my_image_processor.undistort_image(img)
+        thresholded_img = self.my_image_processor.compute_binary_thresholded_image(undistorted_img)
+        #thresholded_img = self.my_image_processor.apply_all_thresholds(undistorted_img)
         transformed_img = self.my_image_processor.apply_perspective_transform(thresholded_img)
         return transformed_img
 
-    def fit_lane_lines(self,transformed_img):
-        leftx, lefty, rightx, righty, left_lane_inds, right_lane_inds = self.my_image_processor.get_lane_lines_pixels_using_sliding_windows(transformed_img)
-        # Fit a second order polynomial to each
-        left_fit = np.polyfit(lefty, leftx, 2)
-        right_fit = np.polyfit(righty, rightx, 2)
-        # Generate x and y values for plotting
-        ploty = np.linspace(0, transformed_img.shape[0]-1, transformed_img.shape[0] )
-        left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
-        right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+    def get_lane_lines(self,transformed_img):
 
-        # temporay plot results
-        # Create an image to draw on and an image to show the selection window
-        out_img = np.dstack((transformed_img, transformed_img, transformed_img))*255
-        window_img = np.zeros_like(out_img)
+        peaks, histogram = self.my_image_processor.compute_histogram_with_peaks(transformed_img)
+        leftx_base = peaks[0]
+        rightx_base = peaks[1]
 
-        nonzero = transformed_img.nonzero()
-        nonzeroy = np.array(nonzero[0])
-        nonzerox = np.array(nonzero[1])
-        # Color in left and right line pixels
-        out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
-        out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
+        lane_binary_left =  self.left_lane_line.fit_lane_line(transformed_img,leftx_base)
+        lane_binary_right =  self.right_lane_line.fit_lane_line(transformed_img,rightx_base)
 
-        # Generate a polygon to illustrate the search window area
-        # And recast the x and y points into usable format for cv2.fillPoly()
-        # Set the width of the windows +/- margin
-        # TODO change later
-        margin = 100
-        left_line_window1 = np.array([np.transpose(np.vstack([left_fitx-margin, ploty]))])
-        left_line_window2 = np.array([np.flipud(np.transpose(np.vstack([left_fitx+margin, ploty])))])
-        left_line_pts = np.hstack((left_line_window1, left_line_window2))
-        right_line_window1 = np.array([np.transpose(np.vstack([right_fitx-margin, ploty]))])
-        right_line_window2 = np.array([np.flipud(np.transpose(np.vstack([right_fitx+margin, ploty])))])
-        right_line_pts = np.hstack((right_line_window1, right_line_window2))
+        left_fitx = self.left_lane_line.get_allx()
+        right_fitx = self.right_lane_line.get_allx()
+        ploty = self.left_lane_line.get_ally()
 
-        # Draw the lane onto the warped blank image
-        cv2.fillPoly(window_img, np.int_([left_line_pts]), (0,255, 0))
-        cv2.fillPoly(window_img, np.int_([right_line_pts]), (0,255, 0))
-        result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
-        plt.imshow(result)
-        plt.plot(left_fitx, ploty, color='yellow')
-        plt.plot(right_fitx, ploty, color='yellow')
-        plt.xlim(0, 1280)
-        plt.ylim(720, 0)
-        left_curverad, right_curverad = self.compute_curvature(ploty,left_fitx,right_fitx)
-        return result, left_fitx, right_fitx, ploty, left_curverad, right_curverad
+        combined_binary = np.zeros_like(lane_binary_right)
+        out_img = np.dstack((lane_binary_right, lane_binary_left, combined_binary))*255
+        new_curverad_l = self.left_lane_line.get_curvature()
+        new_curverad_r = self.right_lane_line.get_curvature()
+        lane_dist_right = self.right_lane_line.get_lane_position()
+        lane_dist_left = self.left_lane_line.get_lane_position()
+        w_lane = lane_dist_right - lane_dist_left
+        position = w_lane/2 - lane_dist_right
 
-    def compute_curvature(self,ploty,leftx,rightx):
-        y_eval = np.max(ploty)
-        # Define conversions in x and y from pixels space to meters
-        ym_per_pix = 30/720 # meters per pixel in y dimension
-        xm_per_pix = 3.7/700 # meters per pixel in x dimension
-
-        # Fit new polynomials to x,y in world space
-        left_fit_cr = np.polyfit(ploty*ym_per_pix, leftx*xm_per_pix, 2)
-        right_fit_cr = np.polyfit(ploty*ym_per_pix, rightx*xm_per_pix, 2)
-        # Calculate the new radii of curvature
-        left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
-        right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
-        return left_curverad, right_curverad
+        return out_img, left_fitx, right_fitx, ploty, position, new_curverad_l, new_curverad_r
 
     def process_test_images(self):
         #for i,img_name in enumerate(("camera_cal/calibration3.jpg", "test_images/straight_lines1.jpg")):
         for img_name in glob.glob("test_images/*.jpg"):
             print(img_name)
             img = mpimg.imread(img_name)
-            undistorded_img = my_lanes_lines.my_image_processor.undistort_image(img)
-            processed_image = my_lanes_lines.process_image(img)
-            result, left_fitx, right_fitx, ploty, left_curverad, right_curverad = my_lanes_lines.fit_lane_lines(processed_image)
-            #plt.imshow(result)
-            #plt.show()
-            final_result = my_lanes_lines.my_image_processor.draw_lanes_on_road(undistorded_img,result,ploty,left_fitx,right_fitx)
-            final_result = my_lanes_lines.my_image_processor.add_curve_radius_and_car_pos_to_images(final_result,0.0,left_curverad,right_curverad)
+            undistorded_img = self.my_image_processor.undistort_image(img)
+            processed_image = self.process_image(img)
+            result, left_fitx, right_fitx, ploty, left_curverad, right_curverad = self.fit_lane_lines(processed_image)
+            final_result = self.my_image_processor.draw_lanes_on_road(undistorded_img,result,ploty,left_fitx,right_fitx)
+            final_result = self.my_image_processor.add_curve_radius_and_car_pos_to_images(final_result,0.0,left_curverad,right_curverad)
             plt.imshow(final_result)
             plt.show()
 
@@ -142,7 +125,8 @@ if __name__ == '__main__':
     print('Output file: {}'.format(output_file))
     print('Debug mode: {}'.format(debug))
 
-    my_lanes_lines=LaneLines()
+    my_lanes_line_detector=LaneLineDetector(debug)
 
-    my_lanes_lines.process_test_video(input_file,output_file)
+    my_lanes_line_detector.process_test_video(input_file,output_file)
+
     #my_lanes_lines.process_test_images()
