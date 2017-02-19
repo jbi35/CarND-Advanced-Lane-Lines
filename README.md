@@ -16,7 +16,7 @@
 
 
 ### 1. Camera Calibration
-The code for the calculation of the distortion matrix of the camera can be found in the file ```ImageProcessor.py```. When constructing an object of the class ImageProcessor the funciton ```calibrate_camera```is called. This function checks whether the file ```camera_calibration_data.pickle```is available which contains the ```camera_matrix```and the ```camera_distortion_coefficients```. If that is not the case, the function
+The code for the calculation of the distortion matrix of the camera can be found in the file ```ImageProcessor.py```. When constructing an object of the class ImageProcessor the funciton ```calibrate_camera```is called. This function checks whether the file ```camera_calibration_data.pickle```is available which contains the ```camera_matrix```and the ```camera_distortion_coefficients``` . If that is not the case, the function
 ```compute_camera_calibration``` (ImageProcessor.py lines 29-58) is called, which computes the aforementioned ```camera_distortion_coefficients``` and ```camera_matrix``` using the provided calibration images and OpenCV's ``` cv2.findChessboardCorners(gray, (9,6))``` function. Afterwards the calibration data is stored in a pickle file for future use.
 
 Below an example of an undistored image along with it's original, distorted counterpart is shown.
@@ -36,7 +36,7 @@ The next step is the computation of a transformation matrix to compute the persp
 
 The class ```ImageProcessor.py``` also handles the perspective transformation.
 The code for this can be found in lines 85-10 in the file ```ImageProcessor.py```. The transformation matrices are computed using the
-```cv2.getPerspectiveTransform``` function from OpenCV (cf. line 22 and 24 in ``ImageProcessor.py```)
+```cv2.getPerspectiveTransform``` function from OpenCV (cf. line 22 and 24 in ```ImageProcessor.py```)
 
 Below you can find an example image in original and transformed space, respectively.
 
@@ -44,11 +44,12 @@ Below you can find an example image in original and transformed space, respectiv
 
 ### 3. Apply binary mask for lane line identification:
 As discussed in the lecture, a combination of different binary thresholds is used to try to identify possible lane line pixels. In this project I used the following combination of thresholds:
-* A [175,255] threshold on the s-channel of the image in hls color-space
-* A [30,150] threshold on the gradient of the image computed using the sobel operator
-
-The code for this masking operation can be found in ```ImageProcessor.py``` in lines xxx-xxx.
-The pictures below show two images to which this thresholding operation has been applied.
+* A [90,255] threshold on the s-channel of the image in hls color-space
+* A [30,150] threshold on the x-gradient of the image computed using the sobel operator
+* An or combination of the two thresholds above to obtain the final mask
+The code for this masking operation can be found in ```ImageProcessor.py``` in lines 100-140.
+The pictures below shows an images to which this thresholding operation has been applied.
+Note that thresholding operation is performed on unwarped images, as this worked better.
 
 ![alt text][image6]
 
@@ -81,12 +82,12 @@ marked in green and the radii of the left and right lane line are shown at the t
 ![alt text][image8]
 
 ### 7. Project video
-
+The project video can be found in this directory as output.mp4
 
 ![alt text][video1]
 
 ### 8. Reflection
-After completing this project, I can see that a robust pipeline to detect lane line in a realistic setting is an immense challenge and significantly more difficult than I would have anticipated. Having tested my pipeline on the harder challenge videos and seeing not so great performance there, I believe that major challenges for the current version of my pipeline are, amongst others:
+After completing this project, I can see that a robust pipeline to detect lane line in a realistic setting is an immense challenge and significantly more difficult than I would have anticipated. Similar to the deep learning projects there are many many parameters which can be tuned. Having tested my pipeline on the harder challenge videos and seeing not so great performance there, I believe that major challenges for the current version of my pipeline are, amongst others:
 
 * Quickly changing lighting conditions or shadows
 * Changes in the color of the road surface

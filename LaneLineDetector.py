@@ -132,9 +132,6 @@ class LaneLineDetector:
             plt.ylim(720, 0)
             ## save those manually
             plt.show()
-            #print('lane_images/'+img_name)
-            #string = 'lane_images/'+img_name
-            #fig.savefig(string)
 
 
 
