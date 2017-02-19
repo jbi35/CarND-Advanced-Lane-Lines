@@ -57,6 +57,7 @@ class ImageProcessor:
         # detected chessboard corners
         cv2.calibrateCamera(object_points, image_points, img.shape[0:2], self.camera_matrix, self.camera_distortion_coefficients)
 
+
     def calibrate_camera(self):
         """
             Calibrate camera either load calibration data or perform calibration using images
@@ -100,13 +101,14 @@ class ImageProcessor:
         """
             apply thresholding using various techniques to image and return binary image
         """
-        # parameters, make arguments later on
+        # parameters,
         # threshold x-gradient
         min_grad = 30
         max_grad = 150
 
         # threshold s-channel
-        s_thresh_min = 175
+        s_thresh_min = 90
+        #s_thresh_min = 175
         s_thresh_max = 255
 
         # convert image to HLS space
@@ -128,7 +130,6 @@ class ImageProcessor:
 
         s_channel_binary = np.zeros_like(s_channel)
         s_thresh = cv2.inRange(s_channel.astype('uint8'), s_thresh_min, s_thresh_max)
-
         s_channel_binary[(s_thresh == 255)] = 1
 
         # Stack each channel to view their individual contributions in green and blue respectively
@@ -185,3 +186,111 @@ class ImageProcessor:
         cv2.putText(img, "Left radius: %.2f m" % left_radius,(left_offset, height_offset + 1*40), cv2.FONT_HERSHEY_SIMPLEX, 1, [255, 255, 255], 2)
         cv2.putText(img, "Right radius: %.2f m" % right_radius, (left_offset, height_offset + 2*40), cv2.FONT_HERSHEY_SIMPLEX, 1, [255, 255, 255], 2)
         return img
+
+    def compute_binary_thresholded_image_v2(self,image):
+        """
+            apply thresholding using various techniques to image and return binary image
+        """
+        # Choose a Sobel kernel size
+        ksize = 3 # Choose a larger odd number to smooth gradient measurements
+
+        # Apply each of the thresholding functions
+
+        #margin=100,
+        #kernel_size=15
+        #sobelx_thresh=(20,100)
+        #sobely_thresh=(20,100)
+        #mag_grad_thresh=(20,250)
+        #dir_grad_thresh=(0.3, 1.3)
+
+        kernel_size = 31
+        thresh_sobel = (50, 150)
+        mag_grad_thresh = (50, 255)
+        dir_grad_thresh = (0.75, 1.15)
+
+        gradx = self.abs_sobel_thresh(image, 'x', kernel_size, thresh_sobel)
+        grady = self.abs_sobel_thresh(image, 'y', kernel_size, thresh_sobel)
+        mag_binary = self.mag_thresh(image, kernel_size, mag_grad_thresh)
+        dir_binary = self.dir_threshold(image, kernel_size, dir_grad_thresh)
+
+        s_binary = self.s_channel_threshold(image,thresh=(175,255))
+        r_binary = self.r_channel_threshold(image,thresh=(200,255))
+
+        #combined = np.zeros_like(s_binary)
+        #((gradx == 1) & (grady == 1))
+        #combined[((mag_binary == 1) & (dir_binary == 1)) | s_binary ==1] = 1
+        #combined[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1))] = 1
+
+        combined = np.zeros_like(s_binary)
+        combined[(grady == 1) | ((dir_binary == 1) & (mag_binary == 1))] = 1
+
+         # Combined Gradient/Mag + Color S + Color R
+        combined2 = np.zeros_like(s_binary)
+        combined2[(combined == 1) | (s_binary == 1) | (r_binary == 1)] = 1
+
+        return combined
+
+    def abs_sobel_thresh(self,img, orient='x', sobel_kernel=3, thresh=(0, 255)):
+        # Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        # Apply x or y gradient with the OpenCV Sobel() function
+        # and take the absolute value
+        if orient == 'x':
+            abs_sobel = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 1, 0))
+        if orient == 'y':
+            abs_sobel = np.absolute(cv2.Sobel(gray, cv2.CV_64F, 0, 1))
+        # Rescale back to 8 bit integer
+        scaled_sobel = np.uint8(255*abs_sobel/np.max(abs_sobel))
+        # Create a copy and apply the threshold
+        binary_output = np.zeros_like(scaled_sobel)
+        # Here I'm using inclusive (>=, <=) thresholds, but exclusive is ok too
+        binary_output[(scaled_sobel >= thresh[0]) & (scaled_sobel <= thresh[1])] = 1
+        # Return the result
+        return binary_output
+
+    def mag_thresh(self,img, sobel_kernel=3, mag_thresh=(0, 255)):
+        # Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        # Take both Sobel x and y gradients
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
+        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
+        # Calculate the gradient magnitude
+        gradmag = np.sqrt(sobelx**2 + sobely**2)
+        # Rescale to 8 bit
+        scale_factor = np.max(gradmag)/255
+        gradmag = (gradmag/scale_factor).astype(np.uint8)
+        # Create a binary image of ones where threshold is met, zeros otherwise
+        binary_output = np.zeros_like(gradmag)
+        binary_output[(gradmag >= mag_thresh[0]) & (gradmag <= mag_thresh[1])] = 1
+
+        # Return the binary image
+        return binary_output
+
+    def dir_threshold(self,img, sobel_kernel=3, thresh=(0, np.pi/2)):
+        # Grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        # Calculate the x and y gradients
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
+        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
+        # Take the absolute value of the gradient direction,
+        # apply a threshold, and create a binary image result
+        absgraddir = np.arctan2(np.absolute(sobely), np.absolute(sobelx))
+        binary_output =  np.zeros_like(absgraddir)
+        binary_output[(absgraddir >= thresh[0]) & (absgraddir <= thresh[1])] = 1
+        return binary_output
+
+    def s_channel_threshold(self,img,thresh=(90,255)):
+        # convert image to HLS space
+        hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
+        s_channel = hls[:,:,2]
+        s_channel_binary = np.zeros_like(s_channel)
+        s_thresh = cv2.inRange(s_channel.astype('uint8'), thresh[0], thresh[1])
+        s_channel_binary[(s_thresh == 255)] = 1
+        return s_channel_binary
+
+    def r_channel_threshold(self,img,thresh=(200,255)):
+        # Color Threshold R-channel
+        r_channel = img[:,:,0]
+        r_channel_bin = np.zeros_like(r_channel)
+        r_channel_bin[(r_channel_bin > thresh[0]) & (r_channel_bin <= thresh[1])] = 1
+        return r_channel_bin

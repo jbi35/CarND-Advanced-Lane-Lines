@@ -21,12 +21,16 @@ class LaneLineDetector:
 
     def apply_pipeline(self,img):
 
+        # undistort image
         undistorted_img = self.my_image_processor.undistort_image(img)
 
+        # apply thresholds
         thresholded_img = self.my_image_processor.compute_binary_thresholded_image(undistorted_img)
 
+        # warp into brids eye view
         transformed_img = self.my_image_processor.apply_perspective_transform(thresholded_img)
 
+        # perform lane line detection
         lane_img, left_fitx, right_fitx, ploty, position, left_curverad, right_curverad = self.get_lane_lines(transformed_img)
 
         # draw lane line detection on distorted image
@@ -49,7 +53,7 @@ class LaneLineDetector:
             plt.show()
             plt.imshow(final_image)
             plt.show()
-
+        #and we are done
         return final_image
 
     def process_image(self, undistorted_img):
@@ -65,8 +69,12 @@ class LaneLineDetector:
         leftx_base = peaks[0]
         rightx_base = peaks[1]
 
+        # advanced lane line detection
         lane_binary_left =  self.left_lane_line.fit_lane_line(transformed_img,leftx_base)
         lane_binary_right =  self.right_lane_line.fit_lane_line(transformed_img,rightx_base)
+
+        #lane_binary_left =  self.left_lane_line.fit_lane_line_simple(transformed_img,leftx_base)
+        #lane_binary_right =  self.right_lane_line.fit_lane_line_simple(transformed_img,rightx_base)
 
         left_fitx = self.left_lane_line.get_allx()
         right_fitx = self.right_lane_line.get_allx()
@@ -88,22 +96,62 @@ class LaneLineDetector:
         for img_name in glob.glob("test_images/*.jpg"):
             print(img_name)
             img = mpimg.imread(img_name)
-            undistorded_img = self.my_image_processor.undistort_image(img)
-            processed_image = self.process_image(img)
-            result, left_fitx, right_fitx, ploty, left_curverad, right_curverad = self.fit_lane_lines(processed_image)
-            final_result = self.my_image_processor.draw_lanes_on_road(undistorded_img,result,ploty,left_fitx,right_fitx)
-            final_result = self.my_image_processor.add_curve_radius_and_car_pos_to_images(final_result,0.0,left_curverad,right_curverad)
-            plt.imshow(final_result)
-            plt.show()
 
-            output = cv2.cvtColor(processed_image*255, cv2.COLOR_GRAY2RGB)
-            mpimg.imsave('processed_images/'+img_name, output)
+            # undistort image
+            undistorted_img = self.my_image_processor.undistort_image(img)
+
+            #transformed_img = self.my_image_processor.apply_perspective_transform(undistorted_img)
+
+            # apply thresholds
+            thresholded_img = self.my_image_processor.compute_binary_thresholded_image(undistorted_img)
+
+            # warp into brids eye view
+            transformed_img = self.my_image_processor.apply_perspective_transform(thresholded_img)
+
+            # perform lane line detection
+            lane_img, left_fitx, right_fitx, ploty, position, left_curverad, right_curverad = self.get_lane_lines(transformed_img)
+
+            # draw lane line detection on distorted image
+            final_image = self.my_image_processor.draw_lanes_on_road(undistorted_img,lane_img,ploty,left_fitx,right_fitx)
+            final_image = self.my_image_processor.add_curve_radius_and_car_pos_to_images(final_image,position,left_curverad,right_curverad)
+
+
+            mpimg.imsave('undistorted_images/'+img_name, undistorted_img)
+
+            mpimg.imsave('thresholded_images/'+img_name, cv2.cvtColor(thresholded_img*255, cv2.COLOR_GRAY2RGB))
+
+            mpimg.imsave('transformed_images/'+img_name,transformed_img)
+            #mpimg.imsave('transformed_images/'+img_name, cv2.cvtColor(transformed_img*255, cv2.COLOR_GRAY2RGB))
+
+            mpimg.imsave('final_images/'+img_name, final_image)
+
+            plt.imshow(lane_img)
+            plt.plot(left_fitx, ploty, color='yellow')
+            plt.plot(right_fitx, ploty, color='yellow')
+            plt.xlim(0, 1280)
+            plt.ylim(720, 0)
+            ## save those manually
+            plt.show()
+            #print('lane_images/'+img_name)
+            #string = 'lane_images/'+img_name
+            #fig.savefig(string)
+
+
 
     def process_test_video(self,input_file,output_file,start=0.0,end=2.0):
         video = VideoFileClip(input_file)
         #video = video.subclip(t_start=start, t_end=end)
         processed_video = video.fl_image(self.apply_pipeline)
         processed_video.write_videofile(output_file,audio=False)
+
+
+    def undistort_calibration_images_for_writeup(self):
+        for img_name in glob.glob("camera_cal/*.jpg"):
+            print(img_name)
+            img = mpimg.imread(img_name)
+            undistorted_img = self.my_image_processor.undistort_image(img)
+            mpimg.imsave('undistorted_images/'+img_name, undistorted_img)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Advanced lane line detection")
@@ -128,5 +176,5 @@ if __name__ == '__main__':
     my_lanes_line_detector=LaneLineDetector(debug)
 
     my_lanes_line_detector.process_test_video(input_file,output_file)
-
-    #my_lanes_lines.process_test_images()
+    #my_lanes_line_detector.undistort_calibration_images_for_writeup()
+    #my_lanes_line_detector.process_test_images()

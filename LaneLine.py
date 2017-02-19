@@ -26,6 +26,16 @@ class LaneLine():
         # width of frame
         self.frame_width = 1280
 
+    def fit_lane_line_simple(self,img,anchor):
+        x, y, lane_inds, out_img = self.get_lane_lines_pixels_using_sliding_windows(img,anchor)
+        self.current_fit = self.fit_polynomial(x,y)
+        self.best_fit = self.current_fit
+        # compute actual lane line pixels
+        self.ally = np.linspace(0, img.shape[0]-1, img.shape[0] )
+        self.allx= self.best_fit[0]*self.ally **2 + self.best_fit[1]*self.ally  + self.best_fit[2]
+        self.compute_curvature_and_position()
+        return out_img
+
     def fit_lane_line(self,img,anchor):
 
         if self.got_good_fit():
@@ -91,9 +101,6 @@ class LaneLine():
         # Extract left and right line pixel positions
         x = nonzerox[lane_inds]
         y = nonzeroy[lane_inds]
-        #out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
-        #out_img[x, y] = [0, 0, 255]
-        #out_img[nonzeroy[lane_inds], nonzerox[lane_inds]] = [255, 0, 0]
         lane_binary = np.zeros_like(binary_warped)
         lane_binary[nonzeroy[lane_inds], nonzerox[lane_inds]] = 1
 
